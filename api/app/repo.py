@@ -5,11 +5,12 @@ from . import models
 
 def apply_rules(db: Session, tx: models.Transaction, rules: list[models.Rule]):
     desc = (tx.description or "").lower()
-    for r in sorted(rules, key=lambda x: (r.priority, r.id)):
+    #for r in sorted(rules, key=lambda x: (r.priority, r.id)):
         # perform a case‑insensitive substring search.  If the rule pattern
         # appears anywhere in the transaction description then assign the
         # category and subcategory from the rule and stop evaluating.  Do
         # not apply rules that are not active.
+        for r in sorted(rules, key=lambda x: (x.priority, x.id)):
         if r.status != "active":
             continue
         if r.pattern.lower() in desc:
