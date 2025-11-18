@@ -264,3 +264,101 @@ def reapply_rules(request: Request, db: Session = Depends(get_db)):
     from .repo import reapply_all
     reapply_all(db)
     return {"ok": True}
+
+@app.get("/api/dashboard/analytics")
+def dashboard_analytics(start_date: str | None = None, end_date: str | None = None, db: Session = Depends(get_db)):
+    """
+    Return aggregated analytics for the dashboard including:
+    - Spending by category
+    - Monthly spending trends
+    - Top merchants
+    - Summary statistics
+
+    Optional date range filtering with start_date and end_date in YYYY-MM-DD format.
+    """
+    from sqlalchemy import extract, case
+    from datetime import datetime as dt
+    from decimal import Decimal
+
+    # Build base query with optional date filtering
+    q = select(models.Transaction)
+    if start_date:
+        try:
+            start_dt = dt.fromisoformat(start_date).date()
+            q = q.where(models.Transaction.post_date >= start_dt)
+        except ValueError:
+            pass
+    if end_date:
+        try:
+            end_dt = dt.fromisoformat(end_date).date()
+            q = q.where(models.Transaction.post_date <= end_dt)
+        except ValueError:
+            pass
+
+    transactions = db.scalars(q).all()
+
+    # Calculate spending by category (only debits - positive amounts)
+    category_spending = {}
+    for txn in transactions:
+        if txn.amount > 0:  # Only count debits (expenses)
+            cat_name = txn.category.name if txn.category else "Uncategorized"
+            category_spending[cat_name] = category_spending.get(cat_name, Decimal(0)) + txn.amount
+
+    # Sort by spending amount descending
+    spending_by_category = [
+        {"category": cat, "amount": float(amt)}
+        for cat, amt in sorted(category_spending.items(), key=lambda x: x[1], reverse=True)
+    ]
+
+    # Calculate monthly trends
+    monthly_spending = {}
+    monthly_income = {}
+    for txn in transactions:
+        if txn.post_date:
+            month_key = txn.post_date.strftime("%Y-%m")
+            if txn.amount > 0:  # Debit (expense)
+                monthly_spending[month_key] = monthly_spending.get(month_key, Decimal(0)) + txn.amount
+            else:  # Credit (income)
+                monthly_income[month_key] = monthly_income.get(month_key, Decimal(0)) + abs(txn.amount)
+
+    # Combine monthly data
+    all_months = set(monthly_spending.keys()) | set(monthly_income.keys())
+    monthly_trends = [
+        {
+            "month": month,
+            "spending": float(monthly_spending.get(month, Decimal(0))),
+            "income": float(monthly_income.get(month, Decimal(0))),
+        }
+        for month in sorted(all_months)
+    ]
+
+    # Calculate top merchants (based on description)
+    merchant_spending = {}
+    for txn in transactions:
+        if txn.amount > 0:  # Only debits
+            desc = txn.description or "Unknown"
+            merchant_spending[desc] = merchant_spending.get(desc, Decimal(0)) + txn.amount
+
+    top_merchants = [
+        {"merchant": merchant, "amount": float(amt)}
+        for merchant, amt in sorted(merchant_spending.items(), key=lambda x: x[1], reverse=True)[:10]
+    ]
+
+    # Calculate summary statistics
+    total_spending = sum(txn.amount for txn in transactions if txn.amount > 0)
+    total_income = sum(abs(txn.amount) for txn in transactions if txn.amount < 0)
+    total_transactions = len(transactions)
+    avg_transaction = total_spending / total_transactions if total_transactions > 0 else 0
+
+    return {
+        "summary": {
+            "total_spending": float(total_spending),
+            "total_income": float(total_income),
+            "net": float(total_income - total_spending),
+            "transaction_count": total_transactions,
+            "average_transaction": float(avg_transaction),
+        },
+        "spending_by_category": spending_by_category,
+        "monthly_trends": monthly_trends,
+        "top_merchants": top_merchants,
+    }
