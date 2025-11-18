@@ -166,8 +166,11 @@ export default function RulesPage() {
           >
             Re-categorize All
           </button>
+          <Link href="/dashboard" className="text-sm text-blue-600 hover:underline">
+            Dashboard
+          </Link>
           <Link href="/" className="text-sm text-blue-600 hover:underline">
-            Back to Dashboard
+            Upload
           </Link>
         </div>
       </div>

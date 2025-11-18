@@ -114,6 +114,9 @@ export default function UploadPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Upload Bank Statements</h1>
         <div className="space-x-4 text-sm">
+          <Link href="/dashboard" className="text-blue-600 hover:underline">
+            Dashboard
+          </Link>
           <Link href="/rules" className="text-blue-600 hover:underline">
             Categorization Rules
           </Link>
